@@ -1,4 +1,3 @@
-// Blinker.h
 #ifndef BLINKER_H
 #define BLINKER_H
 
