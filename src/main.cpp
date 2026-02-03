@@ -1,74 +1,108 @@
 #include <Arduino.h>
-#include <chrono>
+#include "Button.h"
+#include "Blinker.h"
 
-constexpr size_t LED_PIN_BLUE = 43;
-constexpr size_t LED_PIN_RED = 37;
-constexpr size_t LED_PIN_YELLOW = 36;
-constexpr size_t LED_PIN_GREEN = 35;
+constexpr uint8_t LED_PIN_BLUE = 43;
+constexpr uint8_t LED_PIN_RED = 37;
+constexpr uint8_t LED_PIN_YELLOW = 36;
+constexpr uint8_t LED_PIN_GREEN = 35;
+constexpr uint8_t BUTTON_PIN_INPUT = 3;
+constexpr uint8_t BOOT_PIN_INPUT = 0;
 
-void policeLeds();
-void trafficLights();
+constexpr uint32_t SECOND = 1000;
+constexpr uint32_t HALF_SECOND = 500;
+constexpr uint32_t QUARTER_SECOND = 250;
+
+void slow();
+void fast();
+void halfFast();
+
+Button btn(BUTTON_PIN_INPUT);
+Button btnBoot(BOOT_PIN_INPUT, true);// boot button press is LOW
+
+Blinker ledGreen(LED_PIN_GREEN, 1000);
+Blinker ledYellow(LED_PIN_YELLOW, 1000);
 
 void setup() 
 {
+
   pinMode(LED_PIN_BLUE, OUTPUT);
   pinMode(LED_PIN_RED, OUTPUT);
   pinMode(LED_PIN_YELLOW, OUTPUT);
   pinMode(LED_PIN_GREEN, OUTPUT);
+  pinMode(BUTTON_PIN_INPUT, INPUT_PULLUP);
+  pinMode(BOOT_PIN_INPUT, INPUT_PULLUP);
+
+  ledGreen.begin();
+  ledYellow.begin();
+
+  Serial.begin(115200);
 }
+
+
+enum class Mode {Fast,Slow,Third, None};
+Mode mode = Mode::Slow;
+Mode lastMode = Mode::Slow;
 
 void loop() 
-{
-  //trafficLights();
-  policeLeds();
-}
-
-struct Step 
-{
-  uint8_t pin;
-  uint16_t on_ms;
-  uint16_t off_ms;
-  uint8_t repeats;
-};
-
-constexpr uint16_t SECUND_DELAY = 1000;
-constexpr uint16_t HALF_SECUND_DELAY = 500;
-
-constexpr uint8_t BLINK = 1;
-constexpr uint8_t YELLOW_BLINKS = 3;
-
-constexpr Step trafficLightsSteps[] = 
-{
-  { LED_PIN_RED,    SECUND_DELAY * 2, HALF_SECUND_DELAY, BLINK },
-  { LED_PIN_YELLOW,  HALF_SECUND_DELAY , HALF_SECUND_DELAY, YELLOW_BLINKS },
-  { LED_PIN_GREEN,  SECUND_DELAY * 4, HALF_SECUND_DELAY, BLINK },
-};
-
-constexpr Step policeLedsSteps[] = 
-{
-  { LED_PIN_RED,    HALF_SECUND_DELAY / 2, HALF_SECUND_DELAY / 2, BLINK },
-  { LED_PIN_BLUE,  HALF_SECUND_DELAY / 2 , HALF_SECUND_DELAY / 2, BLINK }, // LED_PIN_BLUE
-};
-
-template <size_t count>
-void runSequence(const Step (&steps)[count])
-{
-  for (const Step &s : steps) 
-  {
-    for (uint8_t i {}; i < s.repeats; ++i) 
+{ 
+    switch (btn.poll())
     {
-      digitalWrite(s.pin, HIGH); delay(s.on_ms);
-      digitalWrite(s.pin, LOW);  delay(s.off_ms);
+      case ButtonEvent::ShortPress:
+        mode = Mode::Slow;
+        break;
+      case ButtonEvent::LongPress:
+        mode = Mode::Third;
+        break;
+      default:
+        break;
     }
-  }
+
+    switch (btnBoot.poll())
+    {
+      case ButtonEvent::ShortPress:
+        mode = Mode::Fast;
+        break;
+      case ButtonEvent::LongPress:
+        mode = Mode::Third;
+        break;
+      default:
+        break;
+    }
+
+    if (mode != lastMode) 
+    {
+
+      lastMode = mode;
+
+      switch (mode) 
+      {
+        case Mode::Fast:  fast();  break;
+        case Mode::Slow:  slow();  break;
+        case Mode::Third: halfFast(); break;
+      }
+    }
+    ledGreen.update();
+    ledYellow.update();
 }
 
-void trafficLights()
+void fast() 
 {
-    runSequence(trafficLightsSteps);
+  const uint32_t now = Board::millis();
+  ledGreen.sync(QUARTER_SECOND, now, Level::Low);
+  ledYellow.sync(QUARTER_SECOND, now, Level::Low);
 }
 
-void policeLeds()
+void slow() 
 {
-    runSequence(policeLedsSteps);
+  const uint32_t now = Board::millis();
+  ledGreen.sync(SECOND, now, Level::Low);
+  ledYellow.sync(SECOND, now, Level::Low);
+}
+
+void halfFast() 
+{
+  const uint32_t now = Board::millis();
+  ledGreen.sync(HALF_SECOND, now, Level::Low);
+  ledYellow.sync(HALF_SECOND, now, Level::Low);
 }
